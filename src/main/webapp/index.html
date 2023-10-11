@@ -125,12 +125,12 @@
             username = usernameInit;
             paper = document.getElementById("paintContext").getContext("2d");
 
-            wsChat = new WebSocket('ws://192.168.56.1:8081/chat');
+            wsChat = new WebSocket('ws://127.0.0.1:8081/chat');
             wsChat.onopen = () => this.onOpenChat();
             wsChat.onmessage = (e) => this.onMessageChat(JSON.parse(e.data));
             wsChat.onclose = () => this.onCloseChat();
 
-            wsPaint = new WebSocket('ws://192.168.56.1:8081/paint');
+            wsPaint = new WebSocket('ws://127.0.0.1:8081/paint');
             wsPaint.onopen = () => this.onOpenPaint();
             wsPaint.onmessage = (e) => this.onMessagePaint(JSON.parse(e.data));
             wsPaint.onclose = () => this.onClosePaint();
