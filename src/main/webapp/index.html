@@ -1,0 +1,262 @@
+<html>
+<head>
+    <title>WebChat</title>
+    <style>
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #ccc;
+        }
+        .tabcontent {
+            display: none;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-top: none;
+        }
+        .tabcontent {
+            animation: fadeEffect 1s; /* Fading effect takes 1 second */
+        }
+        @keyframes fadeEffect {
+            from {opacity: 0;}
+            to {opacity: 1;}
+        }
+        #chatContent {
+            height: 68vh;
+            overflow-y: scroll;
+            display: flex;
+            flex-direction: column;
+        }
+        #paintContext {
+            width: 1000px;
+            height: 1000px;
+        }
+        .hidden { display:none; }
+    </style>
+    <script>
+        let wsChat = null;
+        let wsPaint = null;
+        let username = null;
+
+        var paper = null;
+        var pressedMouse = false;
+        var x = null;
+        var y = null;
+        var colorLine ="#6125fa";
+
+        document.addEventListener("mousedown", startDrawing);
+        document.addEventListener("mousemove", drawLine);
+        document.addEventListener("mouseup", stopDrawing);
+
+        function startDrawing(e){
+            pressedMouse = true;
+            x = e.offsetX;
+            y = e.offsetY;
+
+            wsPaint.send(JSON.stringify({
+                x: x,
+                y: y,
+                type: 'START'
+            }));
+            document.getElementById("paintContext").style.cursor = "crosshair";
+        }
+
+        function drawLine(e) {
+            if (pressedMouse) {
+                var xM = e.offsetX;
+                var yM = e.offsetY;
+
+                wsPaint.send(JSON.stringify({
+                    x: xM,
+                    y: yM,
+                    type: 'MIDDLE'
+                }));
+
+                drawing_line(colorLine, x, y, xM, yM, paper);
+                x = xM;
+                y = yM;
+            }
+        }
+
+        function stopDrawing(e) {
+            pressedMouse = false;
+
+            var xM = e.offsetX;
+            var yM = e.offsetY;
+
+            wsPaint.send(JSON.stringify({
+                x: xM,
+                y: yM,
+                type: 'END'
+            }));
+
+            drawing_line(colorLine, x, y, xM, yM, paper);
+
+            x = null;
+            y = null;
+            document.getElementById("paintContext").style.cursor = "default";
+        }
+
+        function drawing_line(color, x_start, y_start, x_end, y_end, board){
+            board.beginPath();
+            board.strokeStyle = color;
+            board.lineWidth = 2;
+            board.moveTo(x_start,y_start);
+            board.lineTo(x_end,y_end);
+            board.stroke();
+            board.closePath();
+        }
+
+        function init(usernameInit) {
+            username = usernameInit;
+            paper = document.getElementById("paintContext").getContext("2d");
+
+            wsChat = new WebSocket('ws://192.168.56.1:8081/chat');
+            wsChat.onopen = () => this.onOpenChat();
+            wsChat.onmessage = (e) => this.onMessageChat(JSON.parse(e.data));
+            wsChat.onclose = () => this.onCloseChat();
+
+            wsPaint = new WebSocket('ws://192.168.56.1:8081/paint');
+            wsPaint.onopen = () => this.onOpenPaint();
+            wsPaint.onmessage = (e) => this.onMessagePaint(JSON.parse(e.data));
+            wsPaint.onclose = () => this.onClosePaint();
+
+            document.getElementById('authPage').remove();
+            document.getElementById('webChatPage').classList.remove('hidden');
+            chatEvents();
+        }
+        function onOpenPaint() {
+        }
+        function onOpenChat() {
+            wsChat.send(JSON.stringify({
+                sender: username,
+                text: 'joined',
+                type: 'JOIN'
+            }));
+        }
+        function onMessagePaint(dot) {
+            console.log("x:" + x + "; y:" + y);
+            console.log("dot.x:" + dot.x + "; dot.y:" + dot.y);
+            switch (dot.type) {
+                case 'START':
+                    x = dot.x;
+                    y = dot.y;
+                    break;
+                case 'MIDDLE':
+                    drawing_line(colorLine, x, y, dot.x, dot.y, paper);
+                    x = dot.x;
+                    y = dot.y;
+                    break;
+                case 'END':
+                    drawing_line(colorLine, x, y, dot.x, dot.y, paper);
+                    x = null;
+                    y = null;
+                    break;
+            }
+        }
+        function onMessageChat(message) {
+            let messageBlock = document.createElement('p');
+            switch (message.type) {
+                case 'JOIN':
+                    messageBlock.innerText = message.sender + ' joined.';
+                    break;
+                case 'LEAVE':
+                    messageBlock.innerText = message.sender + ' disconnected.';
+                    break;
+                default:
+                    messageBlock.innerText = message.sender + ': ' + message.text;
+                    break;
+            }
+            document.getElementById('chatContent').appendChild(messageBlock);
+            document.getElementById('chatContent').scrollTo(0, document.getElementById('chatContent').scrollHeight);
+        }
+        function onClosePaint() {
+
+        }
+        function onCloseChat() {
+            wsChat.send(JSON.stringify({
+                sender: username,
+                text: 'disconnected',
+                type: 'LEAVE'
+            }));
+        }
+
+        function chatEvents() {
+            //send msg
+            document.getElementById('sendMessageBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                wsChat.send(JSON.stringify({
+                    sender: username,
+                    text: document.getElementsByName('message')[0].value,
+                    type: 'CHAT'
+                }));
+                document.getElementsByName('message')[0].value = '';
+            });
+        }
+
+        function tabOpen(event, elementId) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(elementId).style.display = "block";
+            event.currentTarget.className += " active";
+        }
+
+        window.addEventListener("DOMContentLoaded", (event) => {
+            document.getElementById('enterChatBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                init(document.getElementsByName('usernameAuth')[0].value);
+                document.getElementById("webChatPage").getElementsByClassName("tablinks")[0].click();
+            });
+        });
+    </script>
+</head>
+<body>
+
+<div id="authPage">
+    <input name="usernameAuth" type="text"/>
+    <button id="enterChatBtn">Enter chat</button>
+</div>
+
+<div id="webChatPage" class="hidden">
+    <div class="tab">
+        <button class="tablinks" onclick="tabOpen(event, 'chat')">Chat</button>
+        <button class="tablinks" onclick="tabOpen(event, 'paint')">Paint</button>
+    </div>
+
+    <div id="chat" class="tabcontent active">
+        <h1>Welcome to simple WebChat</h1>
+        <div id="chatContent">
+        </div>
+        <input placeholder="Enter your message" type="text" name="message"/>
+        <button id="sendMessageBtn">Send message</button>
+    </div>
+
+    <div id="paint" class="tabcontent">
+        <h1>Welcome to Paint</h1>
+        <canvas id="paintContext" width="1000px" height="1000px"></canvas>
+    </div>
+</div>
+
+</body>
+</html>
